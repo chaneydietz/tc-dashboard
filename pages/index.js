@@ -634,7 +634,6 @@ function NewTxModal({ onClose, onCreate }) {
       deadlines: [],
       notes: [],
       contacts: { sellerAgent: 'Bill Dietz' },
-      created_at: new Date().toISOString(),
     }
     const created = await apiCreate('transactions', tx)
     onCreate(created)
