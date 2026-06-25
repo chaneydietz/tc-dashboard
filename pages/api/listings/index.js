@@ -1,23 +1,29 @@
--- Run this in your Supabase SQL Editor to add the listings table
+import { createClient } from '@supabase/supabase-js'
 
-create table listings (
-  id uuid default gen_random_uuid() primary key,
-  address text,
-  list_date date,
-  agent_name text,
-  price text,
-  status text default 'active',
-  mls text,
-  skyslope text,
-  on_rental_program boolean default false,
-  checklists jsonb default '{}',
-  notes jsonb default '[]',
-  contacts jsonb default '{}',
-  created_at timestamptz default now()
-);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+)
 
--- Allow public read/write
-alter table listings enable row level security;
+export default async function handler(req, res) {
+  if (req.method === 'GET') {
+    const { data, error } = await supabase
+      .from('listings')
+      .select('*')
+      .order('list_date', { ascending: false, nullsLast: true })
+    if (error) return res.status(500).json({ error: error.message })
+    return res.status(200).json(data)
+  }
 
-create policy "Allow all" on listings
-  for all using (true) with check (true);
+  if (req.method === 'POST') {
+    const { data, error } = await supabase
+      .from('listings')
+      .insert([req.body])
+      .select()
+      .single()
+    if (error) return res.status(500).json({ error: error.message })
+    return res.status(201).json(data)
+  }
+
+  res.status(405).end()
+}
