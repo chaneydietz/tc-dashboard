@@ -694,8 +694,7 @@ function NewListingModal({ onClose, onCreate }) {
       ...form,
       checklists: JSON.parse(JSON.stringify(DEFAULT_LISTING_CHECKLISTS)),
       notes: [],
-      contacts: { listingAgent: 'Bill Dietz' },
-      created_at: new Date().toISOString(),
+      contacts: { listingAgent: 'Bill Dietz' }
     }
     const created = await apiCreate('listings', listing)
     onCreate(created)
