@@ -711,22 +711,41 @@ function NewTxModal({ onClose, onCreate }) {
 
 function NewTxFromContractModal({ onClose, onCreate }) {
   const [step, setStep] = useState('upload') // 'upload' | 'analyzing' | 'review'
-  const [files, setFiles] = useState([]) // [{ name, base64 }]
+  const [files, setFiles] = useState([]) // [{ name, fileId, status: 'uploading' | 'ready' | 'error' }]
   const [error, setError] = useState('')
   const [extracted, setExtracted] = useState(null)
   const [saving, setSaving] = useState(false)
 
+  async function uploadOne(file) {
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result.split(',')[1])
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    const response = await fetch('/api/upload-contract-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdfBase64: base64, filename: file.name })
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Upload failed')
+    return data.fileId
+  }
+
   function onFilesSelected(e) {
     const picked = Array.from(e.target.files || [])
-    Promise.all(picked.map(f => new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve({ name: f.name, base64: reader.result.split(',')[1] })
-      reader.onerror = reject
-      reader.readAsDataURL(f)
-    }))).then(loaded => {
-      setFiles(prev => [...prev, ...loaded])
-    })
     e.target.value = ''
+    picked.forEach(f => {
+      const entry = { name: f.name, fileId: null, status: 'uploading' }
+      setFiles(prev => [...prev, entry])
+      uploadOne(f).then(fileId => {
+        setFiles(prev => prev.map(x => (x.name === f.name && x.status === 'uploading') ? { ...x, fileId, status: 'ready' } : x))
+      }).catch(err => {
+        console.error(err)
+        setFiles(prev => prev.map(x => (x.name === f.name && x.status === 'uploading') ? { ...x, status: 'error' } : x))
+      })
+    })
   }
 
   function removeFile(i) {
@@ -745,13 +764,15 @@ function NewTxFromContractModal({ onClose, onCreate }) {
 
   async function analyze() {
     if (files.length === 0) { setError('Add at least the purchase agreement.'); return }
+    if (files.some(f => f.status === 'uploading')) { setError('Still uploading documents — wait a moment and try again.'); return }
+    if (files.some(f => f.status === 'error')) { setError('One or more files failed to upload. Remove it and try re-adding it.'); return }
     setError('')
     setStep('analyzing')
     try {
       const response = await fetch('/api/parse-contract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documents: files.map(f => ({ name: f.name, pdfBase64: f.base64 })) })
+        body: JSON.stringify({ documents: files.map(f => ({ name: f.name, fileId: f.fileId })) })
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Server error')
@@ -854,6 +875,9 @@ function NewTxFromContractModal({ onClose, onCreate }) {
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#f4f4f0', borderRadius: 6, marginBottom: 6 }}>
                   <span style={{ fontSize: 12, color: '#888', width: 18 }}>{i + 1}.</span>
                   <span style={{ fontSize: 13, flex: 1 }}>{f.name}</span>
+                  {f.status === 'uploading' && <span style={{ fontSize: 11, color: '#888' }}>Uploading...</span>}
+                  {f.status === 'error' && <span style={{ fontSize: 11, color: '#A32D2D' }}>Failed</span>}
+                  {f.status === 'ready' && <span style={{ fontSize: 11, color: '#1D9E75' }}>✓</span>}
                   <button className="icon-btn" onClick={() => moveFile(i, -1)} disabled={i === 0}>↑</button>
                   <button className="icon-btn" onClick={() => moveFile(i, 1)} disabled={i === files.length - 1}>↓</button>
                   <button className="icon-btn" onClick={() => removeFile(i)}>×</button>
@@ -863,7 +887,7 @@ function NewTxFromContractModal({ onClose, onCreate }) {
             {error && <p style={{ fontSize: 13, color: '#A32D2D', marginTop: 8 }}>{error}</p>}
             <div className="modal-actions">
               <button className="btn-secondary" onClick={onClose}>Cancel</button>
-              <button className="btn-primary" onClick={analyze}>Analyze Documents</button>
+              <button className="btn-primary" onClick={analyze} disabled={files.some(f => f.status === 'uploading')}>Analyze Documents</button>
             </div>
           </>
         )}
