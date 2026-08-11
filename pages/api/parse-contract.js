@@ -6,7 +6,7 @@
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '25mb'
+      sizeLimit: '40mb'
     }
   }
 }
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
   const instructions = `You are helping a real estate transaction coordinator build an escrow timeline from contract documents.
 
-The documents above are provided in chronological order: the original purchase agreement first, followed by any counter offers or addenda in the order they were signed. LATER DOCUMENTS OVERRIDE EARLIER ONES wherever their terms conflict (e.g. a counter changing the close-of-escrow date, or an addendum changing who pays a fee). Use the most recent applicable term for every field.
+The documents above are provided in chronological order: the original purchase agreement first, followed by any counter offers or addenda in the order they were signed. There may be several counters and addenda — sometimes five or six or more, especially with multiple counters going back and forth between buyer and seller. LATER DOCUMENTS OVERRIDE EARLIER ONES wherever their terms conflict (e.g. a counter changing the close-of-escrow date, or an addendum changing who pays a fee). Work through the documents in order and keep a running picture of the current, most up-to-date value for every field — the last document to touch a given term always wins, no matter how many documents came before it. If two documents signed on the same day both amend the same term, prefer whichever one is more specific or was clearly signed later based on any timestamps present.
 
 Return ONLY a single JSON object, no other text, no markdown backticks, matching this exact shape:
 
@@ -77,7 +77,7 @@ Include every date-driven milestone typically found in a CA residential purchase
       },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
-        max_tokens: 4000,
+        max_tokens: 16000,
         messages: [{ role: 'user', content }]
       })
     })
