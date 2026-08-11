@@ -433,6 +433,15 @@ function Details({ tx, onChange }) {
     ['mls', 'MLS number', 'text'],
     ['skyslope', 'Skyslope file', 'text'],
   ]
+  const contractFields = [
+    ['seller', 'Seller'],
+    ['buyer', 'Buyer'],
+    ['apn', 'APN'],
+    ['escrow_company', 'Escrow company'],
+    ['escrow_number', 'Escrow number'],
+    ['acceptance_date', 'Acceptance date', 'date'],
+  ]
+  const hasTimeline = Array.isArray(tx.timeline_groups) && tx.timeline_groups.length > 0
   return (
     <div>
       <div className="detail-grid" style={{ marginBottom: 12 }}>
@@ -455,6 +464,22 @@ function Details({ tx, onChange }) {
           </select>
         </div>
       </div>
+
+      <div style={{ fontWeight: 600, fontSize: 13, margin: '4px 0 8px', color: '#1F3864' }}>Contract details</div>
+      <div className="detail-grid" style={{ marginBottom: 12 }}>
+        {contractFields.map(([key, label, type]) => (
+          <div key={key} className="field-group">
+            <label>{label}</label>
+            <input type={type || 'text'} defaultValue={tx[key] || ''} onBlur={e => onChange({ [key]: e.target.value })} placeholder="—" />
+          </div>
+        ))}
+      </div>
+
+      {hasTimeline && (
+        <button className="mini-btn green" onClick={() => window.open(`/api/generate-timeline-doc/${tx.id}`, '_blank')}>
+          ⬇ Download Escrow Timeline Doc
+        </button>
+      )}
     </div>
   )
 }
@@ -682,6 +707,234 @@ function NewTxModal({ onClose, onCreate }) {
   )
 }
 
+// ── NewTxFromContractModal ─────────────────────────────────────────────────────
+
+function NewTxFromContractModal({ onClose, onCreate }) {
+  const [step, setStep] = useState('upload') // 'upload' | 'analyzing' | 'review'
+  const [files, setFiles] = useState([]) // [{ name, base64 }]
+  const [error, setError] = useState('')
+  const [extracted, setExtracted] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  function onFilesSelected(e) {
+    const picked = Array.from(e.target.files || [])
+    Promise.all(picked.map(f => new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve({ name: f.name, base64: reader.result.split(',')[1] })
+      reader.onerror = reject
+      reader.readAsDataURL(f)
+    }))).then(loaded => {
+      setFiles(prev => [...prev, ...loaded])
+    })
+    e.target.value = ''
+  }
+
+  function removeFile(i) {
+    setFiles(prev => prev.filter((_, idx) => idx !== i))
+  }
+
+  function moveFile(i, dir) {
+    setFiles(prev => {
+      const arr = [...prev]
+      const j = i + dir
+      if (j < 0 || j >= arr.length) return arr
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
+      return arr
+    })
+  }
+
+  async function analyze() {
+    if (files.length === 0) { setError('Add at least the purchase agreement.'); return }
+    setError('')
+    setStep('analyzing')
+    try {
+      const response = await fetch('/api/parse-contract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documents: files.map(f => ({ name: f.name, pdfBase64: f.base64 })) })
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Server error')
+      setExtracted(data.extracted)
+      setStep('review')
+    } catch (err) {
+      console.error(err)
+      setError('Could not analyze documents: ' + err.message)
+      setStep('upload')
+    }
+  }
+
+  function updateField(k, v) {
+    setExtracted(prev => ({ ...prev, [k]: v }))
+  }
+
+  function updateGroupField(i, k, v) {
+    setExtracted(prev => {
+      const groups = [...(prev.timelineGroups || [])]
+      groups[i] = { ...groups[i], [k]: v }
+      return { ...prev, timelineGroups: groups }
+    })
+  }
+
+  function removeGroup(i) {
+    setExtracted(prev => ({ ...prev, timelineGroups: (prev.timelineGroups || []).filter((_, idx) => idx !== i) }))
+  }
+
+  function updateFee(i, v) {
+    setExtracted(prev => {
+      const fees = [...(prev.feeAllocations || [])]
+      fees[i] = v
+      return { ...prev, feeAllocations: fees }
+    })
+  }
+
+  function removeFee(i) {
+    setExtracted(prev => ({ ...prev, feeAllocations: (prev.feeAllocations || []).filter((_, idx) => idx !== i) }))
+  }
+
+  async function confirmCreate() {
+    if (!extracted.propertyAddress?.trim()) { alert('Property address is required.'); return }
+    setSaving(true)
+    try {
+      const deadlines = (extracted.timelineGroups || [])
+        .filter(g => g.date && g.date !== 'TBD')
+        .map(g => ({ name: g.label, date: g.date }))
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+
+      const tx = {
+        address: extracted.propertyAddress,
+        coe: extracted.closeOfEscrow && extracted.closeOfEscrow !== 'TBD' ? extracted.closeOfEscrow : '',
+        price: extracted.purchasePrice || '',
+        side: 'seller',
+        status: 'active',
+        seller: extracted.seller || '',
+        buyer: extracted.buyer || '',
+        apn: extracted.apn || '',
+        escrow_company: extracted.escrowCompany || '',
+        escrow_number: extracted.escrowNumber || '',
+        acceptance_date: extracted.acceptanceDate && extracted.acceptanceDate !== 'TBD' ? extracted.acceptanceDate : null,
+        timeline_groups: extracted.timelineGroups || [],
+        fee_allocations: extracted.feeAllocations || [],
+        checklists: JSON.parse(JSON.stringify(DEFAULT_CHECKLISTS)),
+        deadlines,
+        notes: [],
+        contacts: { sellerAgent: 'Bill Dietz' },
+      }
+      const created = await apiCreate('transactions', tx)
+      onCreate(created)
+      window.open(`/api/generate-timeline-doc/${created.id}`, '_blank')
+      onClose()
+    } catch (err) {
+      console.error(err)
+      alert('Error creating escrow: ' + err.message)
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 640 }}>
+        <div className="modal-title">
+          <span>New Escrow from Contract</span>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        {step === 'upload' && (
+          <>
+            <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
+              Upload the purchase agreement first, then any counters or addenda <strong>in the order they were signed</strong>. Later documents override earlier terms where they conflict.
+            </p>
+            <label style={{ cursor: 'pointer' }}>
+              <input type="file" accept="application/pdf" multiple style={{ display: 'none' }} onChange={onFilesSelected} />
+              <span className="mini-btn green">⬆ Add PDF(s)</span>
+            </label>
+            <div style={{ marginTop: 14 }}>
+              {files.length === 0 && <p style={{ fontSize: 13, color: '#888' }}>No documents added yet.</p>}
+              {files.map((f, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#f4f4f0', borderRadius: 6, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: '#888', width: 18 }}>{i + 1}.</span>
+                  <span style={{ fontSize: 13, flex: 1 }}>{f.name}</span>
+                  <button className="icon-btn" onClick={() => moveFile(i, -1)} disabled={i === 0}>↑</button>
+                  <button className="icon-btn" onClick={() => moveFile(i, 1)} disabled={i === files.length - 1}>↓</button>
+                  <button className="icon-btn" onClick={() => removeFile(i)}>×</button>
+                </div>
+              ))}
+            </div>
+            {error && <p style={{ fontSize: 13, color: '#A32D2D', marginTop: 8 }}>{error}</p>}
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={onClose}>Cancel</button>
+              <button className="btn-primary" onClick={analyze}>Analyze Documents</button>
+            </div>
+          </>
+        )}
+
+        {step === 'analyzing' && (
+          <div style={{ padding: '30px 0', textAlign: 'center', color: '#666' }}>
+            Reading contract, counters, and addenda... this can take a moment for longer documents.
+          </div>
+        )}
+
+        {step === 'review' && extracted && (
+          <>
+            <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
+              Review and correct anything before creating the escrow. Nothing is saved yet.
+            </p>
+            {(extracted.notes || []).length > 0 && (
+              <div style={{ background: '#FAEEDA', color: '#854F0B', fontSize: 12, padding: '8px 10px', borderRadius: 6, marginBottom: 12 }}>
+                {extracted.notes.map((n, i) => <div key={i}>⚠ {n}</div>)}
+              </div>
+            )}
+            <div className="modal-row">
+              <div className="modal-field"><label>Property address *</label><input value={extracted.propertyAddress || ''} onChange={e => updateField('propertyAddress', e.target.value)} /></div>
+              <div className="modal-field"><label>Purchase price</label><input value={extracted.purchasePrice || ''} onChange={e => updateField('purchasePrice', e.target.value)} /></div>
+            </div>
+            <div className="modal-row">
+              <div className="modal-field"><label>Seller</label><input value={extracted.seller || ''} onChange={e => updateField('seller', e.target.value)} /></div>
+              <div className="modal-field"><label>Buyer</label><input value={extracted.buyer || ''} onChange={e => updateField('buyer', e.target.value)} /></div>
+            </div>
+            <div className="modal-row">
+              <div className="modal-field"><label>APN</label><input value={extracted.apn || ''} onChange={e => updateField('apn', e.target.value)} /></div>
+              <div className="modal-field"><label>Acceptance date</label><input type="date" value={extracted.acceptanceDate === 'TBD' ? '' : extracted.acceptanceDate || ''} onChange={e => updateField('acceptanceDate', e.target.value)} /></div>
+            </div>
+            <div className="modal-row">
+              <div className="modal-field"><label>Escrow company</label><input value={extracted.escrowCompany || ''} onChange={e => updateField('escrowCompany', e.target.value)} /></div>
+              <div className="modal-field"><label>Escrow number</label><input value={extracted.escrowNumber || ''} onChange={e => updateField('escrowNumber', e.target.value)} /></div>
+            </div>
+            <div className="modal-field" style={{ marginBottom: 14 }}>
+              <label>Close of escrow</label>
+              <input type="date" value={extracted.closeOfEscrow === 'TBD' ? '' : extracted.closeOfEscrow || ''} onChange={e => updateField('closeOfEscrow', e.target.value)} />
+            </div>
+
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#1F3864' }}>Timeline</div>
+            {(extracted.timelineGroups || []).map((g, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: 8, background: '#f4f4f0', borderRadius: 6 }}>
+                <input style={{ flex: 2 }} value={g.label} onChange={e => updateGroupField(i, 'label', e.target.value)} />
+                <input style={{ flex: 1 }} type="date" value={g.date === 'TBD' ? '' : g.date} onChange={e => updateGroupField(i, 'date', e.target.value)} />
+                <button className="icon-btn" onClick={() => removeGroup(i)}>×</button>
+              </div>
+            ))}
+
+            <div style={{ fontWeight: 600, fontSize: 13, margin: '14px 0 6px', color: '#1F3864' }}>Fee & Cost Allocations</div>
+            {(extracted.feeAllocations || []).map((f, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                <input style={{ flex: 1 }} value={f} onChange={e => updateFee(i, e.target.value)} />
+                <button className="icon-btn" onClick={() => removeFee(i)}>×</button>
+              </div>
+            ))}
+
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setStep('upload')}>Back</button>
+              <button className="btn-primary" onClick={confirmCreate} disabled={saving}>
+                {saving ? 'Creating...' : 'Create Escrow + Generate Doc'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── NewListingModal ───────────────────────────────────────────────────────────
 
 function NewListingModal({ onClose, onCreate }) {
@@ -821,6 +1074,7 @@ export default function Home() {
 
   const [expandedId, setExpandedId] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [showContractModal, setShowContractModal] = useState(false)
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [saved, setSaved] = useState(false)
@@ -958,6 +1212,12 @@ export default function Home() {
 
         <span className={`save-flash${saved ? ' show' : ''}`}>✓ Saved</span>
 
+        {mode === 'escrows' && (
+          <button className="add-btn" style={{ background: '#3C3489' }} onClick={() => setShowContractModal(true)}>
+            📄 New from Contract
+          </button>
+        )}
+
         <button className="add-btn" onClick={() => setShowModal(true)}>
           {mode === 'listings' ? '+ New Listing' : '+ New Escrow'}
         </button>
@@ -1067,6 +1327,9 @@ export default function Home() {
       )}
       {showModal && mode === 'escrows' && (
         <NewTxModal onClose={() => setShowModal(false)} onCreate={onCreateTx} />
+      )}
+      {showContractModal && (
+        <NewTxFromContractModal onClose={() => setShowContractModal(false)} onCreate={onCreateTx} />
       )}
     </>
   )
