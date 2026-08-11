@@ -12,6 +12,7 @@
     "react": "^18",
     "react-dom": "^18",
     "@supabase/supabase-js": "^2.43.0",
-    "next-auth": "^4.24.7"
+    "next-auth": "^4.24.7",
+    "docx": "^9.0.2"
   }
 }
