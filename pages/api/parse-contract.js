@@ -28,7 +28,7 @@ export default async function handler(req, res) {
 
 The documents above are provided in chronological order: the original purchase agreement first, followed by any counter offers or addenda in the order they were signed. There may be several counters and addenda — sometimes five or six or more, especially with multiple counters going back and forth between buyer and seller. LATER DOCUMENTS OVERRIDE EARLIER ONES wherever their terms conflict (e.g. a counter changing the close-of-escrow date, or an addendum changing who pays a fee). Work through the documents in order and keep a running picture of the current, most up-to-date value for every field — the last document to touch a given term always wins, no matter how many documents came before it. If two documents signed on the same day both amend the same term, prefer whichever one is more specific or was clearly signed later based on any timestamps present.
 
-Return ONLY a single JSON object, no other text, no markdown backticks, matching this exact shape:
+Return ONLY a single JSON object, no other text, no markdown backticks, and no raw line breaks inside any string value (if a name or address wraps across lines in the source document, join it with a single space instead of a line break). Match this exact shape:
 
 {
   "propertyAddress": "Full property address as written in the contract",
@@ -89,8 +89,16 @@ Include every date-driven milestone typically found in a CA residential purchase
     }
 
     const text = data.content?.map(c => c.text || '').join('') || ''
-    const clean = text.replace(/```json|```/g, '').trim()
-    const extracted = JSON.parse(clean)
+    // Strip markdown fences, and collapse any raw line breaks that may have
+    // landed inside string values (invalid in JSON) into spaces.
+    const clean = text.replace(/```json|```/g, '').replace(/\r\n|\r|\n/g, ' ').trim()
+    let extracted
+    try {
+      extracted = JSON.parse(clean)
+    } catch (parseErr) {
+      console.error('JSON parse failed. Raw text:', text)
+      return res.status(500).json({ error: 'The AI response could not be parsed as JSON: ' + parseErr.message })
+    }
 
     return res.status(200).json({ extracted })
   } catch (err) {
