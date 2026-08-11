@@ -6,7 +6,7 @@
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '40mb'
+      sizeLimit: '1mb'
     }
   }
 }
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
   }
 
-  const { documents } = req.body // [{ name: 'Purchase Agreement.pdf', pdfBase64: '...' }, ...]
+  const { documents } = req.body // [{ name: 'Purchase Agreement.pdf', fileId: 'file_abc123' }, ...]
   if (!Array.isArray(documents) || documents.length === 0) {
     return res.status(400).json({ error: 'No documents provided' })
   }
@@ -61,7 +61,7 @@ Include every date-driven milestone typically found in a CA residential purchase
   for (const doc of documents) {
     content.push({
       type: 'document',
-      source: { type: 'base64', media_type: 'application/pdf', data: doc.pdfBase64 }
+      source: { type: 'file', file_id: doc.fileId }
     })
   }
   content.push({ type: 'text', text: instructions })
@@ -73,7 +73,7 @@ Include every date-driven milestone typically found in a CA residential purchase
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25',
+        'anthropic-beta': 'pdfs-2024-09-25,files-api-2025-04-14',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
