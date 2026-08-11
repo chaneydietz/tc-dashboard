@@ -3,6 +3,14 @@
 // chronological order — later documents (counters/addenda) win when they
 // conflict with earlier terms.
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '25mb'
+    }
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
