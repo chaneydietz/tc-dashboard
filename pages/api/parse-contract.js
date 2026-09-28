@@ -75,9 +75,10 @@ Include every date-driven milestone typically found in a CA residential purchase
         'anthropic-version': '2023-06-01',
         'anthropic-beta': 'pdfs-2024-09-25,files-api-2025-04-14',
       },
-      body: JSON.stringify({
+            body: JSON.stringify({
         model: 'claude-sonnet-5',
         max_tokens: 16000,
+        thinking: { type: 'disabled' },
         messages: [{ role: 'user', content }]
       })
     })
