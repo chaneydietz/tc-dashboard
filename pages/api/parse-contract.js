@@ -88,7 +88,9 @@ Include every date-driven milestone typically found in a CA residential purchase
       return res.status(500).json({ error: data.error?.message || 'AI error', details: data })
     }
 
-    const text = data.content?.map(c => c.text || '').join('') || ''
+      const text = data.content?.map(c => c.text || '').join('') || ''
+    console.log('stop_reason:', data.stop_reason, '| response length:', text.length)
+
     // Strip markdown fences, and collapse any raw line breaks that may have
     // landed inside string values (invalid in JSON) into spaces.
     const clean = text.replace(/```json|```/g, '').replace(/\r\n|\r|\n/g, ' ').trim()
@@ -96,8 +98,14 @@ Include every date-driven milestone typically found in a CA residential purchase
     try {
       extracted = JSON.parse(clean)
     } catch (parseErr) {
-      console.error('JSON parse failed. Raw text:', text)
-      return res.status(500).json({ error: 'The AI response could not be parsed as JSON: ' + parseErr.message })
+      console.error('JSON parse failed. stop_reason:', data.stop_reason, 'Raw text:', text)
+      return res.status(500).json({
+        error: 'The AI response could not be parsed as JSON: ' + parseErr.message,
+        stopReason: data.stop_reason,
+        rawTextLength: text.length,
+        rawTextTail: text.slice(-800) // last 800 chars, so we can see exactly where/how it ends
+      })
+    }
     }
 
     return res.status(200).json({ extracted })
