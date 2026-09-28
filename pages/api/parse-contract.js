@@ -106,7 +106,7 @@ Include every date-driven milestone typically found in a CA residential purchase
         rawTextTail: text.slice(-800) // last 800 chars, so we can see exactly where/how it ends
       })
     }
-    }
+    
 
     return res.status(200).json({ extracted })
   } catch (err) {
