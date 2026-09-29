@@ -1,4 +1,4 @@
-import { supabase } from '../../../../lib/supabase' // adjust path if yours differs
+import { supabaseAdmin } from '../../../../lib/supabase'
 
 export default async function handler(req, res) {
   const { code, state, error } = req.query
