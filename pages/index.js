@@ -1412,9 +1412,9 @@ export default function Home() {
         <NewTxModal onClose={() => setShowModal(false)} onCreate={onCreateTx} />
       )}
       {showContractModal && (
-         {showOutlookModal && <TeamOutlookConnections onClose={() => setShowOutlookModal(false)} />}
-        <NewTxFromContractModal onClose={() => setShowContractModal(false)} onCreate={onCreateTx} />
-      )}
+  <NewTxFromContractModal onClose={() => setShowContractModal(false)} onCreate={onCreateTx} />
+)}
+{showOutlookModal && <TeamOutlookConnections onClose={() => setShowOutlookModal(false)} />}
     </>
   )
 }
