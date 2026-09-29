@@ -4,10 +4,11 @@ export function middleware(req) {
   const { pathname } = req.nextUrl
 
   // Always allow the login page and its API, and static assets
-  if (
+if (
   pathname.startsWith('/login') ||
   pathname.startsWith('/api/check-password') ||
   pathname.startsWith('/api/auth/microsoft') ||
+  pathname.startsWith('/api/cron') ||
   pathname.startsWith('/_next') ||
   pathname.startsWith('/favicon')
 ) {
