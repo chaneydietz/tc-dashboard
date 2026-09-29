@@ -1084,13 +1084,71 @@ function Templates() {
     </div>
   )
 }
+const TEAM_MEMBERS = ['Bill', 'Diana', 'Megan', 'Chaney']
 
+function TeamOutlookConnections({ onClose }) {
+  const [connections, setConnections] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/outlook-connections')
+      .then(r => r.json())
+      .then(data => { setConnections(Array.isArray(data) ? data : []); setLoading(false) })
+  }, [])
+
+  function isConnected(name) {
+    return connections.some(c => c.agent_name === name)
+  }
+
+  async function disconnect(name) {
+    if (!confirm(`Disconnect ${name}'s Outlook?`)) return
+    await fetch(`/api/auth/microsoft/disconnect?agent=${encodeURIComponent(name)}`, { method: 'DELETE' })
+    setConnections(prev => prev.filter(c => c.agent_name !== name))
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-title">
+          <span>Team Outlook Connections</span>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
+          Connect each team member's Outlook so contingency removal and COE dates sync to their calendar, with reminders.
+        </p>
+        {loading ? (
+          <div className="loading">Loading...</div>
+        ) : (
+          TEAM_MEMBERS.map(name => (
+            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f4f4f0', borderRadius: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 13, flex: 1 }}>{name}</span>
+              {isConnected(name) ? (
+                <>
+                  <span style={{ fontSize: 12, color: '#1D9E75', fontWeight: 500 }}>✓ Connected</span>
+                  <button className="mini-btn" onClick={() => disconnect(name)}>Disconnect</button>
+                </>
+              ) : (
+                <a href={`/api/auth/microsoft/login?agent=${encodeURIComponent(name)}`}>
+                  <button className="mini-btn green">Connect</button>
+                </a>
+              )}
+            </div>
+          ))
+        )}
+        <div className="modal-actions">
+          <button className="btn-secondary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
   // mode: 'listings' | 'escrows'
   const [mode, setMode] = useState('listings')
   const [view, setView] = useState('main') // 'main' | 'templates'
+  const [showOutlookModal, setShowOutlookModal] = useState(false)
 
   const [transactions, setTransactions] = useState([])
   const [listings, setListings] = useState([])
@@ -1245,6 +1303,7 @@ export default function Home() {
         <button className="add-btn" onClick={() => setShowModal(true)}>
           {mode === 'listings' ? '+ New Listing' : '+ New Escrow'}
         </button>
+        <button className="mini-btn" onClick={() => setShowOutlookModal(true)}>⚙ Outlook</button>
       </div>
 
       <div className="main">
@@ -1353,6 +1412,7 @@ export default function Home() {
         <NewTxModal onClose={() => setShowModal(false)} onCreate={onCreateTx} />
       )}
       {showContractModal && (
+         {showOutlookModal && <TeamOutlookConnections onClose={() => setShowOutlookModal(false)} />}
         <NewTxFromContractModal onClose={() => setShowContractModal(false)} onCreate={onCreateTx} />
       )}
     </>
