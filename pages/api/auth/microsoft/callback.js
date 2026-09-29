@@ -36,9 +36,9 @@ export default async function handler(req, res) {
 
   const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
 
- const { error: dbError } = await supabaseAdmin
-  .from('outlook_connections')
-  .upsert({ ... }, { onConflict: 'agent_name' })
+  const { error: dbError } = await supabaseAdmin
+    .from('outlook_connections')
+    .upsert({
       agent_name: agent,
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
