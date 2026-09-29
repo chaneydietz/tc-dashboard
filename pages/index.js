@@ -686,12 +686,6 @@ function NewTxModal({ onClose, onCreate }) {
           <span>New Escrow</span>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
-    <div className="modal-field" style={{ marginBottom: 14 }}>
-  <label>Assigned agent</label>
-  <select value={extracted.agentName || 'Bill Dietz'} onChange={e => updateField('agentName', e.target.value)}>
-    {['Bill Dietz', 'Diana', 'Megan', 'Chaney'].map(n => <option key={n} value={n}>{n}</option>)}
-  </select>
-</div>
         <div className="modal-row">
           <div className="modal-field"><label>Property address *</label><input value={form.address} onChange={e => set('address', e.target.value)} placeholder="123 Main St" autoFocus /></div>
           <div className="modal-field"><label>COE date</label><input type="date" value={form.coe} onChange={e => set('coe', e.target.value)} /></div>
