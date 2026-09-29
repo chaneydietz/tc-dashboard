@@ -652,18 +652,32 @@ function NewTxModal({ onClose, onCreate }) {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   async function submit() {
-    if (!form.address.trim()) { alert('Please enter a property address.'); return }
-    const tx = {
-      ...form,
-      checklists: JSON.parse(JSON.stringify(DEFAULT_CHECKLISTS)),
-      deadlines: [],
-      notes: [],
-      contacts: { sellerAgent: 'Bill Dietz' },
-    }
-    const created = await apiCreate('transactions', tx)
-    onCreate(created)
-    onClose()
+  if (!form.address.trim()) { alert('Please enter a property address.'); return }
+  const tx = {
+    ...form,
+    checklists: JSON.parse(JSON.stringify(DEFAULT_CHECKLISTS)),
+    deadlines: [],
+    notes: [],
+    contacts: { sellerAgent: form.agentName || 'Bill Dietz' },
   }
+  const created = await apiCreate('transactions', tx)
+
+  if (tx.coe) {
+    fetch('/api/sync-calendar-events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        address: tx.address,
+        coe: tx.coe,
+        timelineGroups: [], // manual escrows have no contingency dates to parse yet
+        agentName: tx.agentName
+      })
+    }).catch(err => console.error('Calendar sync error:', err))
+  }
+
+  onCreate(created)
+  onClose()
+}
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
