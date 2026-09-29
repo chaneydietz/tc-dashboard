@@ -5,13 +5,14 @@ export function middleware(req) {
 
   // Always allow the login page and its API, and static assets
   if (
-    pathname.startsWith('/login') ||
-    pathname.startsWith('/api/check-password') ||
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/favicon')
-  ) {
-    return NextResponse.next()
-  }
+  pathname.startsWith('/login') ||
+  pathname.startsWith('/api/check-password') ||
+  pathname.startsWith('/api/auth/microsoft') ||
+  pathname.startsWith('/_next') ||
+  pathname.startsWith('/favicon')
+) {
+  return NextResponse.next()
+}
 
   const authCookie = req.cookies.get('site_auth')
   if (authCookie?.value === process.env.SITE_PASSWORD) {
