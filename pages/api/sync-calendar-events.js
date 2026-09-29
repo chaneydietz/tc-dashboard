@@ -8,21 +8,21 @@ export default async function handler(req, res) {
 
   const toCreate = []
   ;(timelineGroups || []).forEach(g => {
-    if (g.date && g.date !== 'TBD' && /contingency/i.test(g.label)) {
-      toCreate.push({
-        subject: `Contingency Removal — ${address}${agentName ? ` (${agentName})` : ''}`,
-        date: g.date,
-        body: g.label
-      })
-    }
+   if (g.date && g.date !== 'TBD' && /contingency/i.test(g.label)) {
+  toCreate.push({
+    subject: `CR - ${address}`,
+    date: g.date,
+    body: g.label
   })
-  if (coe) {
-    toCreate.push({
-      subject: `Close of Escrow — ${address}${agentName ? ` (${agentName})` : ''}`,
-      date: coe,
-      body: 'Close of Escrow'
-    })
-  }
+}
+  })
+ if (coe) {
+  toCreate.push({
+    subject: `COE-${address}`,
+    date: coe,
+    body: 'Close of Escrow'
+  })
+}
 
   if (toCreate.length === 0) {
     return res.status(200).json({ created: 0, total: 0 })
