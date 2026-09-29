@@ -43,11 +43,12 @@ const email = me.mail || me.userPrincipalName || null
   const { error: dbError } = await supabaseAdmin
     .from('outlook_connections')
     .upsert({
-      agent_name: agent,
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
-      expires_at: expiresAt
-    }, { onConflict: 'agent_name' })
+  agent_name: agent,
+  email,
+  access_token: tokenData.access_token,
+  refresh_token: tokenData.refresh_token,
+  expires_at: expiresAt
+}, { onConflict: 'agent_name' })
 
   if (dbError) {
     console.error('Supabase error:', dbError)
