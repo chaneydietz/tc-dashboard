@@ -672,6 +672,12 @@ function NewTxModal({ onClose, onCreate }) {
           <span>New Escrow</span>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
+    <div className="modal-field" style={{ marginBottom: 14 }}>
+  <label>Assigned agent</label>
+  <select value={extracted.agentName || 'Bill Dietz'} onChange={e => updateField('agentName', e.target.value)}>
+    {['Bill Dietz', 'Diana', 'Megan', 'Chaney'].map(n => <option key={n} value={n}>{n}</option>)}
+  </select>
+</div>
         <div className="modal-row">
           <div className="modal-field"><label>Property address *</label><input value={form.address} onChange={e => set('address', e.target.value)} placeholder="123 Main St" autoFocus /></div>
           <div className="modal-field"><label>COE date</label><input type="date" value={form.coe} onChange={e => set('coe', e.target.value)} /></div>
@@ -822,26 +828,37 @@ function NewTxFromContractModal({ onClose, onCreate }) {
         .map(g => ({ name: g.label, date: g.date }))
         .sort((a, b) => new Date(a.date) - new Date(b.date))
 
-      const tx = {
-        address: extracted.propertyAddress,
-        coe: extracted.closeOfEscrow && extracted.closeOfEscrow !== 'TBD' ? extracted.closeOfEscrow : '',
-        price: extracted.purchasePrice || '',
-        side: 'seller',
-        status: 'active',
-        seller: extracted.seller || '',
-        buyer: extracted.buyer || '',
-        apn: extracted.apn || '',
-        escrow_company: extracted.escrowCompany || '',
-        escrow_number: extracted.escrowNumber || '',
-        acceptance_date: extracted.acceptanceDate && extracted.acceptanceDate !== 'TBD' ? extracted.acceptanceDate : null,
-        timeline_groups: extracted.timelineGroups || [],
-        fee_allocations: extracted.feeAllocations || [],
-        checklists: JSON.parse(JSON.stringify(DEFAULT_CHECKLISTS)),
-        deadlines,
-        notes: [],
-        contacts: { sellerAgent: 'Bill Dietz' },
-      }
+        const tx = {
+  address: extracted.propertyAddress,
+  coe: extracted.closeOfEscrow && extracted.closeOfEscrow !== 'TBD' ? extracted.closeOfEscrow : '',
+  agentName: extracted.agentName || 'Bill Dietz',
+  price: extracted.purchasePrice || '',
+  side: 'seller',
+  status: 'active',
+  seller: extracted.seller || '',
+  buyer: extracted.buyer || '',
+  apn: extracted.apn || '',
+  escrow_company: extracted.escrowCompany || '',
+  escrow_number: extracted.escrowNumber || '',
+  acceptance_date: extracted.acceptanceDate && extracted.acceptanceDate !== 'TBD' ? extracted.acceptanceDate : null,
+  timeline_groups: extracted.timelineGroups || [],
+  fee_allocations: extracted.feeAllocations || [],
+  checklists: JSON.parse(JSON.stringify(DEFAULT_CHECKLISTS)),
+  deadlines,
+  notes: [],
+  contacts: { sellerAgent: extracted.agentName || 'Bill Dietz' },
+}
       const created = await apiCreate('transactions', tx)
+      fetch('/api/sync-calendar-events', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    address: tx.address,
+    coe: tx.coe,
+    timelineGroups: tx.timeline_groups,
+    agentName: tx.agentName
+  })
+}).catch(err => console.error('Calendar sync error:', err))
       onCreate(created)
       window.open(`/api/generate-timeline-doc/${created.id}`, '_blank')
       onClose()
