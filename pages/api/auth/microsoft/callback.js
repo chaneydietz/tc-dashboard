@@ -33,7 +33,11 @@ export default async function handler(req, res) {
     console.error('Token exchange failed:', tokenData)
     return res.status(500).send('Failed to connect Outlook: ' + (tokenData.error_description || tokenData.error))
   }
-
+const meRes = await fetch('https://graph.microsoft.com/v1.0/me', {
+  headers: { Authorization: `Bearer ${tokenData.access_token}` }
+})
+const me = await meRes.json()
+const email = me.mail || me.userPrincipalName || null
   const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
 
   const { error: dbError } = await supabaseAdmin
