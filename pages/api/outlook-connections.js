@@ -1,9 +1,9 @@
-import { supabase } from '../../lib/supabase'
+import { supabaseAdmin } from '../../lib/supabase'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end()
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('outlook_connections')
     .select('agent_name, connected_at')
 
