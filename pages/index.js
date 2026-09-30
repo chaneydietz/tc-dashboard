@@ -343,13 +343,14 @@ function Deadlines({ tx, onChange }) {
 
 function Contacts({ tx, onChange }) {
   const fields = [
-    ['buyerName', 'Buyer name'], ['buyerPhone', 'Buyer phone'],
-    ['buyerEmail', 'Buyer email'], ['buyerAgent', 'Buyer agent'],
-    ['sellerName', 'Seller name'], ['sellerPhone', 'Seller phone'],
-    ['sellerEmail', 'Seller email'], ['sellerAgent', 'Seller agent'],
-    ['escrowOfficer', 'Escrow officer'], ['escrowCo', 'Escrow / title co.'],
-    ['tcName', 'TC name'], ['tcPhone', 'TC phone'],
-  ]
+  ['buyerName', 'Buyer name'], ['buyerPhone', 'Buyer phone'],
+  ['buyerEmail', 'Buyer email'], ['buyerAgent', 'Buyer agent'], ['buyerAgentEmail', 'Buyer agent email'],
+  ['sellerName', 'Seller name'], ['sellerPhone', 'Seller phone'],
+  ['sellerEmail', 'Seller email'], ['sellerAgent', 'Seller agent'], ['sellerAgentEmail', 'Seller agent email'],
+  ['escrowOfficer', 'Escrow officer'], ['escrowOfficerPhone', 'Escrow officer phone'], ['escrowOfficerEmail', 'Escrow officer email'],
+  ['escrowCo', 'Escrow / title co.'],
+  ['tcName', 'TC name'], ['tcPhone', 'TC phone'],
+]
   const c = tx.contacts || {}
   return (
     <div className="detail-grid">
