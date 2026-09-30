@@ -595,7 +595,10 @@ async function generateDrafts() {
             {tabs.map(t => (
               <button key={t.key} className={`inner-tab${activeTab === t.key ? ' active' : ''}`} onClick={() => setActiveTab(t.key)}>{t.label}</button>
             ))}
-            <button className="mini-btn ml-auto" onClick={() => onDelete(tx.id)}>🗑 Delete</button>
+           <button className="mini-btn" onClick={generateDrafts} disabled={generatingDrafts}>
+  {generatingDrafts ? 'Generating...' : '✉ Generate Intro Emails'}
+</button>
+<button className="mini-btn ml-auto" onClick={() => onDelete(tx.id)}>🗑 Delete</button>
           </div>
           {activeTab === 'checklist' && <Checklist tx={tx} onChange={handleChange} />}
           {activeTab === 'deadlines' && <Deadlines tx={tx} onChange={handleChange} />}
