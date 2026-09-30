@@ -861,22 +861,25 @@ function NewTxFromContractModal({ onClose, onCreate }) {
   notes: [],
   contacts: { sellerAgent: extracted.agentName || 'Bill Dietz' },
 }
-      const created = await apiCreate('transactions', tx)
+            const created = await apiCreate('transactions', tx)
+
       fetch('/api/sync-calendar-events', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    address: tx.address,
-    coe: tx.coe,
-    timelineGroups: tx.timeline_groups,
-    agentName: tx.agentName
-  })
-        fetch('/api/create-intro-drafts', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(tx)
-}).catch(err => console.error('Draft creation error:', err))
-}).catch(err => console.error('Calendar sync error:', err))
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: tx.address,
+          coe: tx.coe,
+          timelineGroups: tx.timeline_groups,
+          agentName: tx.agentName
+        })
+      }).catch(err => console.error('Calendar sync error:', err))
+
+      fetch('/api/create-intro-drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tx)
+      }).catch(err => console.error('Draft creation error:', err))
+
       onCreate(created)
       window.open(`/api/generate-timeline-doc/${created.id}`, '_blank')
       onClose()
