@@ -599,6 +599,7 @@ async function generateDrafts() {
   {generatingDrafts ? 'Generating...' : '✉ Generate Intro Emails'}
 </button>
 <button className="mini-btn ml-auto" onClick={() => onDelete(tx.id)}>🗑 Delete</button>
+  {draftMsg && <div style={{ fontSize: 12, color: draftMsg.startsWith('Error') ? '#A32D2D' : '#1D9E75', marginBottom: 8 }}>{draftMsg}</div>}
           </div>
           {activeTab === 'checklist' && <Checklist tx={tx} onChange={handleChange} />}
           {activeTab === 'deadlines' && <Deadlines tx={tx} onChange={handleChange} />}
