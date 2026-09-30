@@ -24,7 +24,7 @@ export default async function handler(req, res) {
       code,
       redirect_uri: redirectUri,
       grant_type: 'authorization_code',
-      scope: 'offline_access Calendars.ReadWrite Mail.Send User.Read'
+    scope: 'offline_access Calendars.ReadWrite Mail.Send Mail.ReadWrite User.Read'
     })
   })
 
