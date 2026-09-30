@@ -541,7 +541,28 @@ function TxCard({ tx, expanded, onExpand, onUpdate, onDelete }) {
     onUpdate(merged)
     await apiUpdate('transactions', tx.id, updates)
   }
+const [generatingDrafts, setGeneratingDrafts] = useState(false)
+const [draftMsg, setDraftMsg] = useState('')
 
+async function generateDrafts() {
+  setGeneratingDrafts(true)
+  setDraftMsg('')
+  try {
+    const res = await fetch('/api/create-intro-drafts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tx)
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Failed')
+    setDraftMsg(`✓ ${data.created}/${data.total} draft(s) created in Outlook`)
+    if (data.warnings?.length) setDraftMsg(prev => prev + ' — ' + data.warnings.join('; '))
+  } catch (err) {
+    setDraftMsg('Error: ' + err.message)
+  }
+  setGeneratingDrafts(false)
+  setTimeout(() => setDraftMsg(''), 8000)
+}
   const tabs = [
     { key: 'checklist', label: 'Checklist' },
     { key: 'deadlines', label: 'Deadlines' },
