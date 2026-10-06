@@ -289,14 +289,14 @@ function Deadlines({ tx, onChange }) {
       'cd-urgent': { background: '#FCEBEB', color: '#A32D2D' },
       'cd-soon': { background: '#FAEEDA', color: '#854F0B' },
       'cd-ok': { background: '#E1F5EE', color: '#085041' },
-      'cd-none': { background: '#f0f0ec', color: '#666' },
+      'cd-none': { background: 'var(--divider)', color: '#666' },
     }
     return styles[cdClass(days)] || {}
   }
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '8px 12px', background: session?.accessToken ? '#E1F5EE' : '#f4f4f0', borderRadius: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '8px 12px', background: session?.accessToken ? '#E1F5EE' : 'var(--bg-muted)', borderRadius: 8 }}>
         <span style={{ fontSize: 13, color: '#444', flex: 1 }}>
           {session?.accessToken ? `📅 Google Calendar connected — deadlines will auto-sync` : '📅 Connect Google Calendar to auto-sync deadlines'}
         </span>
@@ -306,7 +306,7 @@ function Deadlines({ tx, onChange }) {
         }
       </div>
       {calMsg && <div style={{ fontSize: 12, color: '#1D9E75', fontWeight: 500, marginBottom: 8 }}>{calMsg}</div>}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 12px', background: '#f4f4f0', borderRadius: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 12px', background: 'var(--bg-muted)', borderRadius: 8 }}>
         <span style={{ fontSize: 13, color: '#444', flex: 1 }}>📄 Import deadlines from an escrow timeline PDF</span>
         <label style={{ cursor: importing ? 'not-allowed' : 'pointer' }}>
           <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={handlePdfUpload} disabled={importing} />
@@ -466,7 +466,7 @@ function Details({ tx, onChange }) {
         </div>
       </div>
 
-      <div style={{ fontWeight: 600, fontSize: 13, margin: '4px 0 8px', color: '#1F3864' }}>Contract details</div>
+      <div style={{ fontWeight: 600, fontSize: 13, margin: '4px 0 8px', color: 'var(--navy)' }}>Contract details</div>
       <div className="detail-grid" style={{ marginBottom: 12 }}>
         {contractFields.map(([key, label, type]) => (
           <div key={key} className="field-group">
@@ -935,7 +935,7 @@ function NewTxFromContractModal({ onClose, onCreate }) {
             <div style={{ marginTop: 14 }}>
               {files.length === 0 && <p style={{ fontSize: 13, color: '#888' }}>No documents added yet.</p>}
               {files.map((f, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#f4f4f0', borderRadius: 6, marginBottom: 6 }}>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--bg-muted)', borderRadius: 6, marginBottom: 6 }}>
                   <span style={{ fontSize: 12, color: '#888', width: 18 }}>{i + 1}.</span>
                   <span style={{ fontSize: 13, flex: 1 }}>{f.name}</span>
                   {f.status === 'uploading' && <span style={{ fontSize: 11, color: '#888' }}>Uploading...</span>}
@@ -992,16 +992,16 @@ function NewTxFromContractModal({ onClose, onCreate }) {
               <input type="date" value={extracted.closeOfEscrow === 'TBD' ? '' : extracted.closeOfEscrow || ''} onChange={e => updateField('closeOfEscrow', e.target.value)} />
             </div>
 
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, color: '#1F3864' }}>Timeline</div>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, color: 'var(--navy)' }}>Timeline</div>
             {(extracted.timelineGroups || []).map((g, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: 8, background: '#f4f4f0', borderRadius: 6 }}>
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6, padding: 8, background: 'var(--bg-muted)', borderRadius: 6 }}>
                 <input style={{ flex: 2 }} value={g.label} onChange={e => updateGroupField(i, 'label', e.target.value)} />
                 <input style={{ flex: 1 }} type="date" value={g.date === 'TBD' ? '' : g.date} onChange={e => updateGroupField(i, 'date', e.target.value)} />
                 <button className="icon-btn" onClick={() => removeGroup(i)}>×</button>
               </div>
             ))}
 
-            <div style={{ fontWeight: 600, fontSize: 13, margin: '14px 0 6px', color: '#1F3864' }}>Fee & Cost Allocations</div>
+            <div style={{ fontWeight: 600, fontSize: 13, margin: '14px 0 6px', color: 'var(--navy)' }}>Fee & Cost Allocations</div>
             {(extracted.feeAllocations || []).map((f, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
                 <input style={{ flex: 1 }} value={f} onChange={e => updateFee(i, e.target.value)} />
@@ -1183,7 +1183,7 @@ function TeamOutlookConnections({ onClose }) {
           <div className="loading">Loading...</div>
         ) : (
           TEAM_MEMBERS.map(name => (
-            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f4f4f0', borderRadius: 8, marginBottom: 8 }}>
+            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--bg-muted)', borderRadius: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 13, flex: 1 }}>{name}</span>
               {isConnected(name) ? (
                 <>
@@ -1208,8 +1208,8 @@ function TeamOutlookConnections({ onClose }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
-  // mode: 'listings' | 'escrows'
-  const [mode, setMode] = useState('listings')
+  // mode: 'escrows' | 'listings'
+  const [mode, setMode] = useState('escrows')
   const [view, setView] = useState('main') // 'main' | 'templates'
   const [showOutlookModal, setShowOutlookModal] = useState(false)
 
@@ -1335,17 +1335,15 @@ export default function Home() {
         <div className="logo">TC <span>Dashboard</span></div>
 
         {/* Mode toggle */}
-        <div style={{ display: 'flex', background: '#f4f4f0', borderRadius: 8, padding: 3, gap: 2 }}>
-          <button
-            className={`tab-btn${mode === 'listings' ? ' active' : ''}`}
-            style={{ margin: 0 }}
-            onClick={() => switchMode('listings')}
-          >Listings</button>
+        <div className="mode-toggle">
           <button
             className={`tab-btn${mode === 'escrows' ? ' active' : ''}`}
-            style={{ margin: 0 }}
             onClick={() => switchMode('escrows')}
           >Escrows</button>
+          <button
+            className={`tab-btn${mode === 'listings' ? ' active' : ''}`}
+            onClick={() => switchMode('listings')}
+          >Listings</button>
         </div>
 
         {mode === 'escrows' && (
@@ -1358,7 +1356,7 @@ export default function Home() {
         <span className={`save-flash${saved ? ' show' : ''}`}>✓ Saved</span>
 
         {mode === 'escrows' && (
-          <button className="add-btn" style={{ background: '#3C3489' }} onClick={() => setShowContractModal(true)}>
+          <button className="add-btn outline" onClick={() => setShowContractModal(true)}>
             📄 New from Contract
           </button>
         )}
@@ -1374,10 +1372,14 @@ export default function Home() {
         {/* ── LISTINGS ── */}
         {mode === 'listings' && (
           <>
+            <div className="page-header">
+              <div className="page-title">Listings</div>
+              <div className="page-subtitle">Newest first</div>
+            </div>
             <div className="stats">
               <div className="stat-card"><div className="slabel">Total listings</div><div className="svalue">{listingStats.total}</div></div>
-              <div className="stat-card"><div className="slabel">Active</div><div className="svalue" style={{ color: '#1D9E75' }}>{listingStats.active}</div></div>
-              <div className="stat-card"><div className="slabel">On rental program</div><div className="svalue" style={{ color: '#3C3489' }}>{listingStats.rental}</div></div>
+              <div className="stat-card"><div className="slabel">Active</div><div className="svalue" style={{ color: 'var(--green)' }}>{listingStats.active}</div></div>
+              <div className="stat-card"><div className="slabel">On rental program</div><div className="svalue" style={{ color: 'var(--navy-mid)' }}>{listingStats.rental}</div></div>
               <div className="stat-card"><div className="slabel">Avg. completion</div><div className="svalue">{listingStats.avgPct}%</div></div>
             </div>
 
@@ -1421,9 +1423,13 @@ export default function Home() {
         {/* ── ESCROWS ── */}
         {mode === 'escrows' && view === 'main' && (
           <>
+            <div className="page-header">
+              <div className="page-title">Escrows</div>
+              <div className="page-subtitle">Sorted by close of escrow</div>
+            </div>
             <div className="stats">
               <div className="stat-card"><div className="slabel">Total</div><div className="svalue">{escrowStats.total}</div></div>
-              <div className="stat-card"><div className="slabel">Active</div><div className="svalue" style={{ color: '#1D9E75' }}>{escrowStats.active}</div></div>
+              <div className="stat-card"><div className="slabel">Active</div><div className="svalue" style={{ color: 'var(--green)' }}>{escrowStats.active}</div></div>
               <div className="stat-card"><div className="slabel">Closing in 7 days</div><div className="svalue" style={{ color: '#A32D2D' }}>{escrowStats.closing7}</div></div>
               <div className="stat-card"><div className="slabel">Avg. completion</div><div className="svalue">{escrowStats.avgPct}%</div></div>
             </div>
