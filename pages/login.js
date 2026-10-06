@@ -22,19 +22,20 @@ export default function Login() {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f4f4f0' }}>
-      <form onSubmit={submit} style={{ background: '#fff', padding: 32, borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.08)', width: 320 }}>
-        <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 16 }}>TC Dashboard</div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'linear-gradient(160deg, #0B2545 0%, #13315C 100%)' }}>
+      <form onSubmit={submit} style={{ background: '#fff', padding: 36, borderRadius: 14, boxShadow: '0 20px 50px rgba(0,0,0,0.3)', width: 340 }}>
+        <div style={{ fontWeight: 700, fontSize: 20, color: '#0B2545', marginBottom: 4 }}>TC Dashboard</div>
+        <div style={{ fontSize: 13, color: '#6B778A', marginBottom: 20 }}>Enter the team password to continue</div>
         <input
           type="password"
           placeholder="Password"
           value={password}
           onChange={e => setPassword(e.target.value)}
           autoFocus
-          style={{ width: '100%', padding: 10, borderRadius: 6, border: '1px solid #ddd', marginBottom: 12 }}
+          style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #C9D3E2', marginBottom: 12, fontSize: 14 }}
         />
         {error && <div style={{ color: '#A32D2D', fontSize: 13, marginBottom: 12 }}>{error}</div>}
-        <button type="submit" className="btn-primary" style={{ width: '100%' }}>Enter</button>
+        <button type="submit" className="btn-primary" style={{ width: '100%', padding: 10 }}>Enter</button>
       </form>
     </div>
   )
