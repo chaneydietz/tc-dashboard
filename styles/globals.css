@@ -172,7 +172,8 @@ body {
 .status-badge { font-size: 11px; padding: 2px 7px; border-radius: var(--radius); font-weight: 500; }
 .status-active { background: var(--green-light); color: var(--green-text); }
 .status-pending { background: var(--amber-light); color: var(--amber-text); }
-.status-escrow { background: var(--purple-light); color: var(--purple-text); }
+.status-contingent, .status-escrow { background: var(--purple-light); color: var(--purple-text); }
+.status-prelisting { background: var(--navy-light); color: var(--navy-mid); }
 .status-closed { background: var(--divider); color: #666; }
 .countdown { font-size: 12px; font-weight: 500; padding: 3px 8px; border-radius: var(--radius); flex-shrink: 0; }
 .cd-urgent { background: var(--red-light); color: var(--red-text); }

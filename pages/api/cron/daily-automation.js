@@ -1,5 +1,6 @@
 // Runs every morning (see vercel.json). It:
-//   1. moves escrows whose close of escrow has passed to Closed,
+//   1. moves escrows to Pending once contingencies are removed and to Closed
+//      once close of escrow has passed,
 //   2. creates Outlook drafts in Chaney's mailbox for checklist emails due today,
 //   3. creates task digest drafts for Megan and Diana (Chaney reviews and sends),
 //   4. emails Chaney a summary of what was created and what's due.
@@ -8,7 +9,7 @@
 import { supabaseAdmin } from '../../../lib/supabase'
 import { createDraftEmail, sendMail } from '../../../lib/microsoftGraph'
 import { DRAFT_BUILDERS, buildDigestEmail, buildNotificationEmail } from '../../../lib/emailTemplates'
-import { pacificToday, addDays, collectTasks, bucketTasks } from '../../../lib/tasks'
+import { pacificToday, addDays, collectTasks, bucketTasks, autoEscrowStatus } from '../../../lib/tasks'
 
 export const config = { maxDuration: 60 }
 
@@ -55,15 +56,18 @@ export default async function handler(req, res) {
     if (error) console.error('Failed to save notification:', error)
   }
 
-  // 1. Move escrows past their close of escrow to Closed.
+  // 1. Contingent -> Pending after the contingency deadline, -> Closed after COE.
   const closed = []
   for (const tx of transactions || []) {
-    if (tx.status === 'closed' || !tx.coe || tx.coe >= today) continue
-    const { error } = await supabaseAdmin.from('transactions').update({ status: 'closed' }).eq('id', tx.id)
-    if (error) { console.error('Auto-close failed:', error); continue }
-    tx.status = 'closed'
-    closed.push(tx.address || 'Untitled')
-    await record({ key: `closed:${tx.id}`, kind: 'closed', title: 'Moved to Closed', body: tx.address, transaction_id: tx.id })
+    const next = autoEscrowStatus(tx, today)
+    if (!next) continue
+    const { error } = await supabaseAdmin.from('transactions').update({ status: next }).eq('id', tx.id)
+    if (error) { console.error('Status update failed:', error); continue }
+    tx.status = next
+    if (next === 'closed') {
+      closed.push(tx.address || 'Untitled')
+      await record({ key: `closed:${tx.id}`, kind: 'closed', title: 'Moved to Closed', body: tx.address, transaction_id: tx.id })
+    }
   }
 
   const allTasks = collectTasks(transactions || [], listings || [])

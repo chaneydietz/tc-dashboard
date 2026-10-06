@@ -5,7 +5,12 @@ import { DEFAULT_CHECKLISTS, DEFAULT_LISTING_CHECKLISTS } from '../lib/checklist
 import {
   pacificToday, formatShortDate, isHiddenItem, escrowDueDate, listingDueDate, sectionApplies,
   draftRuleFor, applyAutoCheck, collectTasks, bucketTasks,
+  ESCROW_STATUSES, LISTING_STATUSES, escrowStatus,
 } from '../lib/tasks'
+
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -515,8 +520,8 @@ function Details({ tx, onChange }) {
         </div>
         <div className="field-group">
           <label>Status</label>
-          <select defaultValue={tx.status || 'active'} onChange={e => onChange({ status: e.target.value })}>
-            {['active', 'pending', 'escrow', 'closed'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          <select defaultValue={escrowStatus(tx)} onChange={e => onChange({ status: e.target.value })}>
+            {ESCROW_STATUSES.map(s => <option key={s} value={s}>{capitalize(s)}</option>)}
           </select>
         </div>
       </div>
@@ -567,7 +572,7 @@ function ListingDetails({ listing, onChange }) {
         <div className="field-group">
           <label>Status</label>
           <select defaultValue={listing.status || 'active'} onChange={e => onChange({ status: e.target.value })}>
-            {['active', 'pending', 'closed'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            {[...LISTING_STATUSES, ...(listing.status && !LISTING_STATUSES.includes(listing.status) ? [listing.status] : [])].map(s => <option key={s} value={s}>{capitalize(s)}</option>)}
           </select>
         </div>
         <div className="field-group">
@@ -595,7 +600,7 @@ function TxCard({ tx, expanded, onExpand, onUpdate, onDelete, draftTemplates }) 
   const dueNow = dueBuckets.overdue.length + dueBuckets.today.length
 
   const sideClass = { buyer: 'side-buyer', seller: 'side-seller', both: 'side-both' }[tx.side] || 'side-seller'
-  const statusClass = `status-${tx.status || 'active'}`
+  const statusClass = `status-${escrowStatus(tx)}`
 
   async function handleChange(updates) {
     const merged = { ...tx, ...updates }
@@ -646,7 +651,7 @@ async function generateDrafts() {
           <div className="tx-meta">
             {tx.agentName && <span>👤 {tx.agentName}</span>}
             {tx.coe && <span>📅 COE {tx.coe}</span>}
-            <span className={`status-badge ${statusClass}`}>{tx.status || 'active'}</span>
+            <span className={`status-badge ${statusClass}`}>{escrowStatus(tx)}</span>
             <span>{prog.done}/{prog.total} tasks ({prog.pct}%)</span>
             {dueNow > 0 && <span className="due-chip overdue">{dueNow} due</span>}
           </div>
@@ -961,7 +966,7 @@ function ListingCard({ listing, expanded, onExpand, onUpdate, onDelete }) {
 // ── NewTxModal ────────────────────────────────────────────────────────────────
 
 function NewTxModal({ onClose, onCreate, onAutoCheck }) {
-  const [form, setForm] = useState({ address: '', coe: '', agentName: '', price: '', side: 'seller', status: 'active', mls: '', skyslope: '' })
+  const [form, setForm] = useState({ address: '', coe: '', agentName: '', price: '', side: 'seller', status: 'contingent', mls: '', skyslope: '' })
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   async function submit() {
@@ -1027,7 +1032,7 @@ function NewTxModal({ onClose, onCreate, onAutoCheck }) {
           <div className="modal-field">
             <label>Status</label>
             <select value={form.status} onChange={e => set('status', e.target.value)}>
-              {['active', 'pending', 'escrow', 'closed'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+              {ESCROW_STATUSES.map(s => <option key={s} value={s}>{capitalize(s)}</option>)}
             </select>
           </div>
         </div>
@@ -1165,7 +1170,7 @@ function NewTxFromContractModal({ onClose, onCreate, onAutoCheck }) {
   agentName: extracted.agentName || 'Bill Dietz',
   price: extracted.purchasePrice || '',
   side: 'seller',
-  status: 'active',
+  status: 'contingent',
   seller: extracted.seller || '',
   buyer: extracted.buyer || '',
   apn: extracted.apn || '',
@@ -1325,7 +1330,7 @@ function NewTxFromContractModal({ onClose, onCreate, onAutoCheck }) {
 // ── NewListingModal ───────────────────────────────────────────────────────────
 
 function NewListingModal({ onClose, onCreate }) {
-  const [form, setForm] = useState({ address: '', list_date: '', agent_name: '', price: '', status: 'active', mls: '', skyslope: '', on_rental_program: false })
+  const [form, setForm] = useState({ address: '', list_date: '', agent_name: '', price: '', status: 'prelisting', mls: '', skyslope: '', on_rental_program: false })
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   async function submit() {
@@ -1364,7 +1369,7 @@ function NewListingModal({ onClose, onCreate }) {
           <div className="modal-field">
             <label>Status</label>
             <select value={form.status} onChange={e => set('status', e.target.value)}>
-              {['active', 'pending', 'closed'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+              {LISTING_STATUSES.map(s => <option key={s} value={s}>{capitalize(s)}</option>)}
             </select>
           </div>
           <div className="modal-field">
@@ -1631,7 +1636,7 @@ export default function Home() {
   const filteredTx = openTx.filter(t => {
     if (filter === 'buyer') return t.side === 'buyer' || t.side === 'both'
     if (filter === 'seller') return t.side === 'seller' || t.side === 'both'
-    if (filter !== 'all') return t.status === filter
+    if (filter !== 'all') return escrowStatus(t) === filter
     return true
   }).filter(t => {
     if (!search) return true
@@ -1658,7 +1663,7 @@ export default function Home() {
   // Stats
   const escrowStats = {
     total: openTx.length,
-    active: openTx.filter(t => t.status === 'active').length,
+    contingent: openTx.filter(t => escrowStatus(t) === 'contingent').length,
     closing7: openTx.filter(t => { const d = daysUntil(t.coe); return d !== null && d >= 0 && d <= 7 }).length,
     avgPct: openTx.length ? Math.round(openTx.reduce((a, t) => a + progress(t).pct, 0) / openTx.length) : 0,
   }
@@ -1671,8 +1676,8 @@ export default function Home() {
     avgPct: listings.length ? Math.round(listings.reduce((a, l) => a + progress(l).pct, 0) / listings.length) : 0,
   }
 
-  const escrowFilters = ['all', 'buyer', 'seller', 'active', 'pending', 'escrow']
-  const listingFilters = ['all', 'active', 'pending', 'closed']
+  const escrowFilters = ['all', 'buyer', 'seller', 'contingent', 'pending']
+  const listingFilters = ['all', 'prelisting', 'active']
 
   return (
     <>
@@ -1785,7 +1790,7 @@ export default function Home() {
             </div>
             <div className="stats">
               <div className="stat-card"><div className="slabel">Total</div><div className="svalue">{escrowStats.total}</div></div>
-              <div className="stat-card"><div className="slabel">Active</div><div className="svalue" style={{ color: 'var(--green)' }}>{escrowStats.active}</div></div>
+              <div className="stat-card"><div className="slabel">Contingent</div><div className="svalue" style={{ color: 'var(--purple-text)' }}>{escrowStats.contingent}</div></div>
               <div className="stat-card"><div className="slabel">Closing in 7 days</div><div className="svalue" style={{ color: '#A32D2D' }}>{escrowStats.closing7}</div></div>
               <div className="stat-card"><div className="slabel">Avg. completion</div><div className="svalue">{escrowStats.avgPct}%</div></div>
             </div>
