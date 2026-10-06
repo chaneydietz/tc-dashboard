@@ -1,7 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import { DEFAULT_CHECKLISTS, DEFAULT_LISTING_CHECKLISTS } from '../lib/checklists'
+import {
+  pacificToday, formatShortDate, isHiddenItem, escrowDueDate, listingDueDate, sectionApplies,
+  draftRuleFor, applyAutoCheck, collectTasks, bucketTasks,
+} from '../lib/tasks'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,8 +38,9 @@ function progress(record) {
   const cl = record.checklists || {}
   Object.values(cl).forEach(items => {
     if (Array.isArray(items)) {
-      total += items.length
-      done += items.filter(i => i.done).length
+      const visible = items.filter(i => !isHiddenItem(i, record))
+      total += visible.length
+      done += visible.filter(i => i.done).length
     }
   })
   return { total, done, pct: total ? Math.round((done / total) * 100) : 0 }
@@ -77,10 +82,40 @@ async function apiDelete(table, id) {
   await fetch(`/api/${table}/${id}`, { method: 'DELETE' })
 }
 
+async function uploadPdf(file) {
+  const base64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result.split(',')[1])
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+  const response = await fetch('/api/upload-contract-file', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pdfBase64: base64, filename: file.name })
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error || 'Upload failed')
+  return data.fileId
+}
+
+function dueChipClass(due, today) {
+  if (due < today) return 'due-chip overdue'
+  if (due === today) return 'due-chip today'
+  return 'due-chip'
+}
+
+function dueChipText(due, today) {
+  if (due < today) return `Overdue · ${formatShortDate(due)}`
+  if (due === today) return 'Due today'
+  return `Due ${formatShortDate(due)}`
+}
+
 // ── Shared checklist UI ───────────────────────────────────────────────────────
 
-function ChecklistSection({ sectionKey, label, items, onToggle, onEditText, onDelete, onAdd }) {
+function ChecklistSection({ sectionKey, label, items, record, dueFn, draftTemplates, onToggle, onEditText, onDelete, onAdd }) {
   const [newText, setNewText] = useState('')
+  const today = pacificToday()
 
   function handleAdd() {
     const t = newText.trim()
@@ -94,23 +129,32 @@ function ChecklistSection({ sectionKey, label, items, onToggle, onEditText, onDe
       <div className="cl-section-header">
         <span className="cl-section-name">{label}</span>
       </div>
-      {(items || []).map((item, i) => (
-        <div key={i} className="check-item">
-          <input
-            type="checkbox"
-            checked={item.done}
-            onChange={e => onToggle(sectionKey, i, e.target.checked)}
-          />
-          <span
-            className={`check-label${item.done ? ' done' : ''}`}
-            contentEditable
-            suppressContentEditableWarning
-            onBlur={e => onEditText(sectionKey, i, e.target.innerText)}
-          >{item.text}</span>
-          <span className="check-timing">{item.timing}</span>
-          <button className="icon-btn" onClick={() => onDelete(sectionKey, i)} title="Remove">×</button>
-        </div>
-      ))}
+      {(items || []).map((item, i) => {
+        if (record && isHiddenItem(item, record)) return null
+        const due = !item.done && dueFn ? dueFn(item, record) : null
+        const rule = draftRuleFor(item)
+        const hasDraft = rule && draftTemplates?.has(rule.key)
+        return (
+          <div key={i} className="check-item">
+            <input
+              type="checkbox"
+              checked={item.done}
+              onChange={e => onToggle(sectionKey, i, e.target.checked)}
+            />
+            <span
+              className={`check-label${item.done ? ' done' : ''}`}
+              contentEditable
+              suppressContentEditableWarning
+              onBlur={e => onEditText(sectionKey, i, e.target.innerText)}
+            >{item.text}</span>
+            {item.done && item.autoChecked && <span className="item-tag" title="Checked off automatically">auto</span>}
+            {hasDraft && !item.done && <span className="item-tag draft" title="A draft is waiting in your Outlook Drafts folder">✉ Draft ready</span>}
+            {due && <span className={dueChipClass(due, today)}>{dueChipText(due, today)}</span>}
+            <span className="check-timing">{item.timing}</span>
+            <button className="icon-btn" onClick={() => onDelete(sectionKey, i)} title="Remove">×</button>
+          </div>
+        )
+      })}
       <div className="add-item-row">
         <input
           className="add-item-input"
@@ -127,7 +171,13 @@ function ChecklistSection({ sectionKey, label, items, onToggle, onEditText, onDe
 
 // ── Escrow checklist ──────────────────────────────────────────────────────────
 
-function Checklist({ tx, onChange }) {
+// After close, only post-closing items keep a due date.
+function closedEscrowDueDate(item, tx) {
+  const due = escrowDueDate(item, tx)
+  return due && due >= tx.coe ? due : null
+}
+
+function Checklist({ tx, draftTemplates, onChange }) {
   const sections = [
     { key: 'both_agents', label: 'Both agents' },
     { key: 'selling_agent', label: 'Selling agent' },
@@ -149,7 +199,10 @@ function Checklist({ tx, onChange }) {
           sectionKey={s.key}
           label={s.label}
           items={tx.checklists[s.key]}
-          onToggle={(sec, i, val) => mutate(cl => { cl[sec][i].done = val })}
+          record={tx}
+          dueFn={!sectionApplies(s.key, tx) ? null : tx.status === 'closed' ? closedEscrowDueDate : escrowDueDate}
+          draftTemplates={draftTemplates}
+          onToggle={(sec, i, val) => mutate(cl => { cl[sec][i].done = val; delete cl[sec][i].autoChecked })}
           onEditText={(sec, i, text) => mutate(cl => { cl[sec][i].text = text })}
           onDelete={(sec, i) => mutate(cl => { cl[sec].splice(i, 1) })}
           onAdd={(sec, text) => mutate(cl => {
@@ -185,7 +238,9 @@ function ListingChecklist({ listing, onChange }) {
           sectionKey={s.key}
           label={s.label}
           items={listing.checklists[s.key]}
-          onToggle={(sec, i, val) => mutate(cl => { cl[sec][i].done = val })}
+          record={listing}
+          dueFn={listingDueDate}
+          onToggle={(sec, i, val) => mutate(cl => { cl[sec][i].done = val; delete cl[sec][i].autoChecked })}
           onEditText={(sec, i, text) => mutate(cl => { cl[sec][i].text = text })}
           onDelete={(sec, i) => mutate(cl => { cl[sec].splice(i, 1) })}
           onAdd={(sec, text) => mutate(cl => {
@@ -477,7 +532,11 @@ function Details({ tx, onChange }) {
       </div>
 
       {hasTimeline && (
-        <button className="mini-btn green" onClick={() => window.open(`/api/generate-timeline-doc/${tx.id}`, '_blank')}>
+        <button className="mini-btn green" onClick={() => {
+          window.open(`/api/generate-timeline-doc/${tx.id}`, '_blank')
+          const cl = applyAutoCheck(tx.checklists, 'timeline')
+          if (cl) onChange({ checklists: cl })
+        }}>
           ⬇ Download Escrow Timeline Doc
         </button>
       )}
@@ -528,10 +587,12 @@ function ListingDetails({ listing, onChange }) {
 
 // ── TxCard (escrow) ───────────────────────────────────────────────────────────
 
-function TxCard({ tx, expanded, onExpand, onUpdate, onDelete }) {
+function TxCard({ tx, expanded, onExpand, onUpdate, onDelete, draftTemplates }) {
   const [activeTab, setActiveTab] = useState('checklist')
   const days = daysUntil(tx.coe)
   const prog = progress(tx)
+  const dueBuckets = bucketTasks(collectTasks([tx], []))
+  const dueNow = dueBuckets.overdue.length + dueBuckets.today.length
 
   const sideClass = { buyer: 'side-buyer', seller: 'side-seller', both: 'side-both' }[tx.side] || 'side-seller'
   const statusClass = `status-${tx.status || 'active'}`
@@ -556,6 +617,10 @@ async function generateDrafts() {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Failed')
     setDraftMsg(`✓ ${data.created}/${data.total} draft(s) created in Outlook`)
+    if (data.created > 0) {
+      const cl = applyAutoCheck(tx.checklists, 'intro')
+      if (cl) handleChange({ checklists: cl })
+    }
     if (data.warnings?.length) setDraftMsg(prev => prev + ' — ' + data.warnings.join('; '))
   } catch (err) {
     setDraftMsg('Error: ' + err.message)
@@ -569,6 +634,7 @@ async function generateDrafts() {
     { key: 'contacts', label: 'Contacts' },
     { key: 'notes', label: `Notes (${(tx.notes || []).length})` },
     { key: 'details', label: 'Details' },
+    { key: 'closing', label: 'Closing review' },
   ]
 
   return (
@@ -582,9 +648,10 @@ async function generateDrafts() {
             {tx.coe && <span>📅 COE {tx.coe}</span>}
             <span className={`status-badge ${statusClass}`}>{tx.status || 'active'}</span>
             <span>{prog.done}/{prog.total} tasks ({prog.pct}%)</span>
+            {dueNow > 0 && <span className="due-chip overdue">{dueNow} due</span>}
           </div>
         </div>
-        <span className={`countdown ${cdClass(days)}`}>{cdText(days)}</span>
+        <span className={`countdown ${tx.status === 'closed' ? 'cd-none' : cdClass(days)}`}>{tx.status === 'closed' ? 'Closed' : cdText(days)}</span>
       </div>
       <div className="progress-bar">
         <div className="progress-fill" style={{ width: `${prog.pct}%` }} />
@@ -601,11 +668,231 @@ async function generateDrafts() {
 <button className="mini-btn ml-auto" onClick={() => onDelete(tx.id)}>🗑 Delete</button>
   {draftMsg && <div style={{ fontSize: 12, color: draftMsg.startsWith('Error') ? '#A32D2D' : '#1D9E75', marginBottom: 8 }}>{draftMsg}</div>}
           </div>
-          {activeTab === 'checklist' && <Checklist tx={tx} onChange={handleChange} />}
+          {activeTab === 'checklist' && <Checklist tx={tx} draftTemplates={draftTemplates} onChange={handleChange} />}
           {activeTab === 'deadlines' && <Deadlines tx={tx} onChange={handleChange} />}
           {activeTab === 'contacts' && <Contacts tx={tx} onChange={handleChange} />}
           {activeTab === 'notes' && <Notes record={tx} onChange={handleChange} />}
           {activeTab === 'details' && <Details tx={tx} onChange={handleChange} />}
+          {activeTab === 'closing' && <ClosingReview tx={tx} onChange={handleChange} />}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Closing statement review ──────────────────────────────────────────────────
+
+const REVIEW_STATUS = {
+  ok: { label: 'OK', className: 'review-ok' },
+  mismatch: { label: 'Mismatch', className: 'review-bad' },
+  missing: { label: 'Missing', className: 'review-bad' },
+  review: { label: 'Check', className: 'review-check' },
+}
+
+function ClosingReview({ tx, onChange }) {
+  const [statement, setStatement] = useState(null) // { name, fileId, status }
+  const [invoices, setInvoices] = useState([])
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState('')
+  const [review, setReview] = useState(null)
+
+  function upload(file, set) {
+    const entry = { name: file.name, fileId: null, status: 'uploading' }
+    set(entry)
+    uploadPdf(file)
+      .then(fileId => set({ ...entry, fileId, status: 'ready' }))
+      .catch(() => set({ ...entry, status: 'error' }))
+  }
+
+  function pickStatement(e) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (f) upload(f, setStatement)
+  }
+
+  function pickInvoices(e) {
+    const picked = Array.from(e.target.files || [])
+    e.target.value = ''
+    picked.forEach(f => {
+      const key = `${f.name}-${Math.random()}`
+      setInvoices(prev => [...prev, { key, name: f.name, status: 'uploading' }])
+      upload(f, entry => setInvoices(prev => prev.map(x => x.key === key ? { ...entry, key } : x)))
+    })
+  }
+
+  async function run() {
+    setError('')
+    setRunning(true)
+    setReview(null)
+    try {
+      const res = await fetch('/api/review-closing-statement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactionId: tx.id,
+          statementFileIds: [statement.fileId],
+          invoiceFileIds: invoices.filter(i => i.status === 'ready').map(i => i.fileId),
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Review failed')
+      setReview(data.review)
+      const flagged = data.review.checks.filter(c => c.status !== 'ok')
+      const noteText = `Closing statement review: ${data.review.summary}` +
+        (flagged.length ? `\n\nNeeds attention:\n${flagged.map(c => `• ${c.item}: expected ${c.expected}, statement shows ${c.found}. ${c.note}`).join('\n')}` : '\n\nEverything checked matched.')
+      onChange({ notes: [{ text: noteText, date: now(), author: 'Closing review' }, ...(tx.notes || [])] })
+    } catch (err) {
+      setError(err.message)
+    }
+    setRunning(false)
+  }
+
+  const uploading = statement?.status === 'uploading' || invoices.some(i => i.status === 'uploading')
+  const fileStatus = f => f.status === 'uploading' ? 'Uploading...' : f.status === 'error' ? 'Failed' : '✓'
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
+        Upload the closing statement from escrow, plus any inspector or vendor invoices. The review compares them with the contract terms and fee allocations on file and flags anything that doesn't match. The result is saved to Notes.
+      </p>
+      <div className="upload-row">
+        <span className="upload-label">Closing statement</span>
+        <label className="mini-btn green" style={{ cursor: 'pointer' }}>
+          <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={pickStatement} />
+          ⬆ {statement ? 'Replace' : 'Upload PDF'}
+        </label>
+        {statement && <span className="upload-file">{statement.name} · {fileStatus(statement)}</span>}
+      </div>
+      <div className="upload-row">
+        <span className="upload-label">Invoices (optional)</span>
+        <label className="mini-btn green" style={{ cursor: 'pointer' }}>
+          <input type="file" accept="application/pdf" multiple style={{ display: 'none' }} onChange={pickInvoices} />
+          ⬆ Add PDF(s)
+        </label>
+        {invoices.map(inv => (
+          <span key={inv.key} className="upload-file">
+            {inv.name} · {fileStatus(inv)}
+            <button className="icon-btn" onClick={() => setInvoices(prev => prev.filter(x => x.key !== inv.key))}>×</button>
+          </span>
+        ))}
+      </div>
+      <button className="btn-primary" style={{ marginTop: 8 }} onClick={run} disabled={!statement || statement.status !== 'ready' || uploading || running}>
+        {running ? 'Reviewing... this can take a minute' : 'Review closing statement'}
+      </button>
+      {error && <p style={{ fontSize: 13, color: 'var(--red-text)', marginTop: 10 }}>{error}</p>}
+      {review && (
+        <div style={{ marginTop: 16 }}>
+          <div className="review-summary">{review.summary}</div>
+          <div className="review-table">
+            {review.checks.map((c, i) => (
+              <div key={i} className="review-row">
+                <span className={`review-status ${REVIEW_STATUS[c.status]?.className || ''}`}>{REVIEW_STATUS[c.status]?.label || c.status}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="review-item">{c.item}</div>
+                  <div className="review-detail">Expected: {c.expected} · Statement: {c.found}</div>
+                  {c.note && <div className="review-detail">{c.note}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Tasks view ────────────────────────────────────────────────────────────────
+
+function TasksView({ transactions, listings, onComplete }) {
+  const [person, setPerson] = useState('all')
+  const today = pacificToday()
+  const all = collectTasks(transactions, listings)
+  const tasks = person === 'all' ? all : all.filter(t => t.owner === person)
+  const buckets = bucketTasks(tasks, today)
+  const groups = [
+    { key: 'overdue', label: 'Overdue', items: buckets.overdue },
+    { key: 'today', label: 'Due today', items: buckets.today },
+    { key: 'upcoming', label: 'Next 7 days', items: buckets.upcoming },
+  ]
+
+  return (
+    <>
+      <div className="stats">
+        <div className="stat-card"><div className="slabel">Overdue</div><div className="svalue" style={{ color: 'var(--red-text)' }}>{buckets.overdue.length}</div></div>
+        <div className="stat-card"><div className="slabel">Due today</div><div className="svalue">{buckets.today.length}</div></div>
+        <div className="stat-card"><div className="slabel">Next 7 days</div><div className="svalue">{buckets.upcoming.length}</div></div>
+        <div className="stat-card"><div className="slabel">Drafts on due date</div><div className="svalue">{tasks.filter(t => t.draftRule && t.due >= today).length}</div></div>
+      </div>
+      <div className="filter-bar">
+        {['all', 'Chaney', 'Megan', 'Diana'].map(p => (
+          <button key={p} className={`chip${person === p ? ' active' : ''}`} onClick={() => setPerson(p)}>
+            {p === 'all' ? 'Everyone' : p}
+          </button>
+        ))}
+      </div>
+      {groups.every(g => g.items.length === 0) ? (
+        <div className="empty-state">
+          <div className="eicon">✅</div>
+          <p>Nothing due in the next 7 days.</p>
+        </div>
+      ) : groups.filter(g => g.items.length > 0).map(g => (
+        <div key={g.key} className="task-group">
+          <div className={`task-group-title${g.key === 'overdue' ? ' overdue' : ''}`}>{g.label} <span>{g.items.length}</span></div>
+          <div className="task-list">
+            {g.items.map(t => (
+              <div key={`${t.kind}-${t.recordId}-${t.section}-${t.index}`} className="task-row">
+                <input type="checkbox" checked={false} onChange={() => onComplete(t)} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="task-text">{t.text}</div>
+                  <div className="task-meta">
+                    <span className={`task-kind ${t.kind}`}>{t.kind === 'escrow' ? 'Escrow' : 'Listing'}</span>
+                    <span>{t.address || 'Untitled'}</span>
+                    <span>· {t.sectionLabel}</span>
+                    {t.draftRule && <span className="item-tag draft">✉ Auto-draft</span>}
+                  </div>
+                </div>
+                <span className={dueChipClass(t.due, today)}>{dueChipText(t.due, today)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+// ── Notifications bell ────────────────────────────────────────────────────────
+
+function NotificationsBell({ notifications, onOpen }) {
+  const [open, setOpen] = useState(false)
+  const unread = notifications.filter(n => !n.read).length
+  const icons = { draft: '✉', digest: '📋', closed: '🏁' }
+
+  function toggle() {
+    const next = !open
+    setOpen(next)
+    if (next && unread > 0) onOpen()
+  }
+
+  return (
+    <div className="bell-wrap">
+      <button className="bell-btn" onClick={toggle} aria-label="Notifications">
+        🔔{unread > 0 && <span className="bell-count">{unread}</span>}
+      </button>
+      {open && (
+        <div className="bell-panel">
+          <div className="bell-title">Notifications</div>
+          {notifications.length === 0 && <div className="bell-empty">No notifications yet. New drafts created each morning will show up here.</div>}
+          {notifications.map(n => (
+            <div key={n.id} className={`bell-item${n.read ? '' : ' unread'}`}>
+              <span className="bell-icon">{icons[n.kind] || '•'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="bell-item-title">{n.title}{n.kind !== 'closed' ? ' — draft in Outlook' : ''}</div>
+                <div className="bell-item-body">{n.body}{n.meta?.missingRecipient ? ' · add a recipient before sending' : ''}</div>
+                <div className="bell-item-time">{new Date(n.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -673,7 +960,7 @@ function ListingCard({ listing, expanded, onExpand, onUpdate, onDelete }) {
 
 // ── NewTxModal ────────────────────────────────────────────────────────────────
 
-function NewTxModal({ onClose, onCreate }) {
+function NewTxModal({ onClose, onCreate, onAutoCheck }) {
   const [form, setForm] = useState({ address: '', coe: '', agentName: '', price: '', side: 'seller', status: 'active', mls: '', skyslope: '' })
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
@@ -687,11 +974,15 @@ function NewTxModal({ onClose, onCreate }) {
     contacts: { sellerAgent: form.agentName || 'Bill Dietz' },
   }
   const created = await apiCreate('transactions', tx)
-fetch('/api/create-intro-drafts', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(tx)
-}).catch(err => console.error('Draft creation error:', err))
+  onCreate(created)
+  fetch('/api/create-intro-drafts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tx)
+  })
+    .then(r => r.json())
+    .then(d => { if (d.created > 0) onAutoCheck(created.id, 'intro') })
+    .catch(err => console.error('Draft creation error:', err))
   if (tx.coe) {
     fetch('/api/sync-calendar-events', {
       method: 'POST',
@@ -702,10 +993,12 @@ fetch('/api/create-intro-drafts', {
         timelineGroups: [], // manual escrows have no contingency dates to parse yet
         agentName: tx.agentName
       })
-    }).catch(err => console.error('Calendar sync error:', err))
+    })
+      .then(r => r.json())
+      .then(d => { if (d.created > 0) onAutoCheck(created.id, 'calendar') })
+      .catch(err => console.error('Calendar sync error:', err))
   }
 
-  onCreate(created)
   onClose()
 }
 
@@ -753,7 +1046,7 @@ fetch('/api/create-intro-drafts', {
 
 // ── NewTxFromContractModal ─────────────────────────────────────────────────────
 
-function NewTxFromContractModal({ onClose, onCreate }) {
+function NewTxFromContractModal({ onClose, onCreate, onAutoCheck }) {
   const [step, setStep] = useState('upload') // 'upload' | 'analyzing' | 'review'
   const [files, setFiles] = useState([]) // [{ name, fileId, status: 'uploading' | 'ready' | 'error' }]
   const [error, setError] = useState('')
@@ -886,7 +1179,10 @@ function NewTxFromContractModal({ onClose, onCreate }) {
   notes: [],
   contacts: { sellerAgent: extracted.agentName || 'Bill Dietz' },
 }
-            const created = await apiCreate('transactions', tx)
+      const created = await apiCreate('transactions', tx)
+      onCreate(created)
+      window.open(`/api/generate-timeline-doc/${created.id}`, '_blank')
+      onAutoCheck(created.id, 'timeline')
 
       fetch('/api/sync-calendar-events', {
         method: 'POST',
@@ -897,16 +1193,20 @@ function NewTxFromContractModal({ onClose, onCreate }) {
           timelineGroups: tx.timeline_groups,
           agentName: tx.agentName
         })
-      }).catch(err => console.error('Calendar sync error:', err))
+      })
+        .then(r => r.json())
+        .then(d => { if (d.created > 0) onAutoCheck(created.id, 'calendar') })
+        .catch(err => console.error('Calendar sync error:', err))
 
       fetch('/api/create-intro-drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(tx)
-      }).catch(err => console.error('Draft creation error:', err))
+      })
+        .then(r => r.json())
+        .then(d => { if (d.created > 0) onAutoCheck(created.id, 'intro') })
+        .catch(err => console.error('Draft creation error:', err))
 
-      onCreate(created)
-      window.open(`/api/generate-timeline-doc/${created.id}`, '_blank')
       onClose()
     } catch (err) {
       console.error(err)
@@ -1208,8 +1508,9 @@ function TeamOutlookConnections({ onClose }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
-  // mode: 'escrows' | 'listings'
+  // mode: 'escrows' | 'tasks' | 'listings' | 'closed'
   const [mode, setMode] = useState('escrows')
+  const [notifications, setNotifications] = useState([])
   const [view, setView] = useState('main') // 'main' | 'templates'
   const [showOutlookModal, setShowOutlookModal] = useState(false)
 
@@ -1230,7 +1531,44 @@ export default function Home() {
       setListings(Array.isArray(listingData) ? listingData : [])
       setLoading(false)
     })
+    apiGet('notifications').then(data => setNotifications(Array.isArray(data) ? data : []))
   }, [])
+
+  // Latest records for async callbacks (auto check-offs that finish after a modal closes).
+  const txRef = useRef(transactions)
+  txRef.current = transactions
+
+  async function autoCheck(txId, ruleKey) {
+    const tx = txRef.current.find(t => t.id === txId)
+    const cl = tx && applyAutoCheck(tx.checklists, ruleKey)
+    if (!cl) return
+    txRef.current = txRef.current.map(t => t.id === txId ? { ...t, checklists: cl } : t)
+    setTransactions(prev => prev.map(t => t.id === txId ? { ...t, checklists: cl } : t))
+    await apiUpdate('transactions', txId, { checklists: cl })
+  }
+
+  async function completeTask(task) {
+    const list = task.kind === 'escrow' ? transactions : listings
+    const record = list.find(r => r.id === task.recordId)
+    if (!record) return
+    const cl = JSON.parse(JSON.stringify(record.checklists))
+    cl[task.section][task.index].done = true
+    const updated = { ...record, checklists: cl }
+    if (task.kind === 'escrow') updateTx(updated)
+    else updateListing(updated)
+    await apiUpdate(task.kind === 'escrow' ? 'transactions' : 'listings', record.id, { checklists: cl })
+  }
+
+  function markNotificationsRead() {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    fetch('/api/notifications', { method: 'POST' }).catch(err => console.error(err))
+  }
+
+  // Template keys of drafts already created, per escrow.
+  const draftTemplatesByTx = {}
+  notifications.filter(n => n.kind === 'draft' && n.transaction_id).forEach(n => {
+    (draftTemplatesByTx[n.transaction_id] = draftTemplatesByTx[n.transaction_id] || new Set()).add(n.meta?.template)
+  })
 
   // Reset filter/search/expanded when switching modes
   function switchMode(newMode) {
@@ -1283,7 +1621,14 @@ export default function Home() {
     if (!b.coe) return -1
     return new Date(a.coe) - new Date(b.coe)
   })
-  const filteredTx = sortedTx.filter(t => {
+  const openTx = sortedTx.filter(t => t.status !== 'closed')
+  const closedTx = sortedTx.filter(t => t.status === 'closed').reverse()
+  const filteredClosed = closedTx.filter(t => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return (t.address || '').toLowerCase().includes(q) || (t.agentName || '').toLowerCase().includes(q)
+  })
+  const filteredTx = openTx.filter(t => {
     if (filter === 'buyer') return t.side === 'buyer' || t.side === 'both'
     if (filter === 'seller') return t.side === 'seller' || t.side === 'both'
     if (filter !== 'all') return t.status === filter
@@ -1312,11 +1657,13 @@ export default function Home() {
 
   // Stats
   const escrowStats = {
-    total: transactions.length,
-    active: transactions.filter(t => t.status === 'active').length,
-    closing7: transactions.filter(t => { const d = daysUntil(t.coe); return d !== null && d >= 0 && d <= 7 }).length,
-    avgPct: transactions.length ? Math.round(transactions.reduce((a, t) => a + progress(t).pct, 0) / transactions.length) : 0,
+    total: openTx.length,
+    active: openTx.filter(t => t.status === 'active').length,
+    closing7: openTx.filter(t => { const d = daysUntil(t.coe); return d !== null && d >= 0 && d <= 7 }).length,
+    avgPct: openTx.length ? Math.round(openTx.reduce((a, t) => a + progress(t).pct, 0) / openTx.length) : 0,
   }
+  const taskBuckets = bucketTasks(collectTasks(transactions, listings))
+  const tasksDueNow = taskBuckets.overdue.length + taskBuckets.today.length
   const listingStats = {
     total: listings.length,
     active: listings.filter(l => l.status === 'active').length,
@@ -1341,9 +1688,17 @@ export default function Home() {
             onClick={() => switchMode('escrows')}
           >Escrows</button>
           <button
+            className={`tab-btn${mode === 'tasks' ? ' active' : ''}`}
+            onClick={() => switchMode('tasks')}
+          >Tasks{tasksDueNow > 0 && <span className="tab-count">{tasksDueNow}</span>}</button>
+          <button
             className={`tab-btn${mode === 'listings' ? ' active' : ''}`}
             onClick={() => switchMode('listings')}
           >Listings</button>
+          <button
+            className={`tab-btn${mode === 'closed' ? ' active' : ''}`}
+            onClick={() => switchMode('closed')}
+          >Closed</button>
         </div>
 
         {mode === 'escrows' && (
@@ -1364,6 +1719,7 @@ export default function Home() {
         <button className="add-btn" onClick={() => setShowModal(true)}>
           {mode === 'listings' ? '+ New Listing' : '+ New Escrow'}
         </button>
+        <NotificationsBell notifications={notifications} onOpen={markNotificationsRead} />
         <button className="mini-btn" onClick={() => setShowOutlookModal(true)}>⚙ Outlook</button>
       </div>
 
@@ -1452,7 +1808,7 @@ export default function Home() {
             ) : filteredTx.length === 0 ? (
               <div className="empty-state">
                 <div className="eicon">📋</div>
-                <p>{transactions.length === 0 ? 'No escrows yet. Click "+ New Escrow" to get started.' : 'No escrows match your filter.'}</p>
+                <p>{openTx.length === 0 ? 'No open escrows. Click "+ New Escrow" to get started.' : 'No escrows match your filter.'}</p>
               </div>
             ) : (
               <div className="tx-grid">
@@ -1460,6 +1816,7 @@ export default function Home() {
                   <TxCard
                     key={tx.id}
                     tx={tx}
+                    draftTemplates={draftTemplatesByTx[tx.id]}
                     expanded={expandedId === tx.id}
                     onExpand={() => setExpandedId(expandedId === tx.id ? null : tx.id)}
                     onUpdate={updateTx}
@@ -1472,17 +1829,69 @@ export default function Home() {
         )}
 
         {mode === 'escrows' && view === 'templates' && <Templates />}
+
+        {/* ── TASKS ── */}
+        {mode === 'tasks' && (
+          <>
+            <div className="page-header">
+              <div className="page-title">Tasks</div>
+              <div className="page-subtitle">Due dates come from each item's timing and the escrow dates</div>
+            </div>
+            {loading
+              ? <div className="loading">Loading tasks...</div>
+              : <TasksView transactions={transactions} listings={listings} onComplete={completeTask} />}
+          </>
+        )}
+
+        {/* ── CLOSED ── */}
+        {mode === 'closed' && (
+          <>
+            <div className="page-header">
+              <div className="page-title">Closed escrows</div>
+              <div className="page-subtitle">Most recent first · moved here automatically the day after COE</div>
+            </div>
+            <div className="filter-bar">
+              <input
+                placeholder="Search by address or agent..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            {loading ? (
+              <div className="loading">Loading closed escrows...</div>
+            ) : filteredClosed.length === 0 ? (
+              <div className="empty-state">
+                <div className="eicon">🏁</div>
+                <p>{closedTx.length === 0 ? 'No closed escrows yet.' : 'No closed escrows match your search.'}</p>
+              </div>
+            ) : (
+              <div className="tx-grid">
+                {filteredClosed.map(tx => (
+                  <TxCard
+                    key={tx.id}
+                    tx={tx}
+                    draftTemplates={draftTemplatesByTx[tx.id]}
+                    expanded={expandedId === tx.id}
+                    onExpand={() => setExpandedId(expandedId === tx.id ? null : tx.id)}
+                    onUpdate={updateTx}
+                    onDelete={deleteTx}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {showModal && mode === 'listings' && (
         <NewListingModal onClose={() => setShowModal(false)} onCreate={onCreateListing} />
       )}
-      {showModal && mode === 'escrows' && (
-        <NewTxModal onClose={() => setShowModal(false)} onCreate={onCreateTx} />
+      {showModal && mode !== 'listings' && (
+        <NewTxModal onClose={() => setShowModal(false)} onCreate={onCreateTx} onAutoCheck={autoCheck} />
       )}
       {showContractModal && (
-  <NewTxFromContractModal onClose={() => setShowContractModal(false)} onCreate={onCreateTx} />
-)}
+        <NewTxFromContractModal onClose={() => setShowContractModal(false)} onCreate={onCreateTx} onAutoCheck={autoCheck} />
+      )}
 {showOutlookModal && <TeamOutlookConnections onClose={() => setShowOutlookModal(false)} />}
     </>
   )
