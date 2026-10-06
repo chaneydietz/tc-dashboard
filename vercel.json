@@ -3,6 +3,13 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "crons": [
-    { "path": "/api/cron/daily-reminders", "schedule": "0 16 * * *" }
+    {
+      "path": "/api/cron/daily-reminders",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/daily-automation",
+      "schedule": "0 14 * * *"
+    }
   ]
 }
